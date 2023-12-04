@@ -13,9 +13,10 @@ from io import BytesIO
 import discord
 import discord.utils
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands, Interaction
 from bot.utils.ui import MessageReply
 from bot.utils.bot_data import Server
+from bot.utils.interactions import respond
 
 
 class Fun(commands.Cog):
@@ -142,6 +143,26 @@ class Fun(commands.Cog):
             else:
                 await user.send(content=f'{msg}')
             await asyncio.sleep(delay=1)
+
+
+
+    @app_commands.command(name="galactic", description="converts text to the galactic alphabet")
+    async def galactic_text(self, interaction: discord.Interaction, text: str, to_alpha:bool=False):
+        alpha_g = "ᔑ ʖ ᓵ ↸ ᒷ ⎓ ⊣ ⍑ ╎ ⋮ ꖌ ꖎ ᒲ リ 𝙹 !¡ ᑑ ∷ ᓭ ℸ ⚍ ⍊ ∴ ̇/ || ⨅".split(' ')
+        alphabet_str = "a b c d e f g h i j k l m n o p q r s t u v w x y z"
+        alpha = alphabet_str.split(' ')
+        # upper = alphabet_str.upper().split(' ')
+        alphabet_swap = {a: g for a, g in zip(alpha, alpha_g)}
+
+        if to_alpha:
+            for a,g in alphabet_swap.items():
+                text = text.replace(g,a)
+            await respond(interaction, text)
+        else:
+            text = text.lower()
+            for a,g in alphabet_swap.items():
+                text = text.replace(a,g)
+            await respond(interaction, text)
 
 
 

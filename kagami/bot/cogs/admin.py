@@ -7,7 +7,7 @@ import discord
 import discord.utils
 from discord.ext import commands
 from discord import app_commands
-from bot.kagami import Kagami
+from bot.kagami_bot import Kagami
 
 def is_developer():
     def predicate(interaction: discord.Interaction) -> bool:
@@ -61,16 +61,28 @@ class Admin(commands.Cog):
         await ctx.send("Shutting Down")
         await self.bot.close()
 
-    @commands.command(name="save", description="saves data")
+    @commands.command(name="save", description="saves old data")
     @commands.is_owner()
     async def save_data(self, ctx):
         self.bot.save_data()
         await ctx.send("Saved the data to file")
 
-    @commands.command(name="load", description="loads data")
+    @commands.command(name="load", description="loads old data")
     @commands.is_owner()
     async def load_data(self, ctx):
         self.bot.load_data()
+        await ctx.send("Loaded data from file")
+
+    @commands.command(name="newsave", description="saves data")
+    @commands.is_owner()
+    async def save_data(self, ctx):
+        self.bot.newSaveData()
+        await ctx.send("Saved the data to file")
+
+    @commands.command(name="newload", description="loads data")
+    @commands.is_owner()
+    async def load_data(self, ctx):
+        self.bot.newLoadData()
         await ctx.send("Loaded data from file")
 
 
@@ -82,6 +94,9 @@ class Admin(commands.Cog):
         else:
             await ctx.send(error)
             traceback.print_exception(error, error, error.__traceback__, file=sys.stderr)
+
+
+
 
 
 

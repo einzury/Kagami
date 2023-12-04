@@ -1,42 +1,33 @@
-import asyncio
 import math
 import re
 
-from typing import (
-    Literal,
-    Dict,
-    Union,
-    Optional,
-    List,
-)
-
 import wavelink
 from wavelink.ext import spotify
-from wavelink import YouTubeTrack
 import discord
 from enum import Enum
-from typing import List
+from bot.utils.utils import (
+    secondsDivMod
+)
 
 
-
-class Playlist:
+class OldPlaylist:
     def __init__(self, name: str, track_list: list[str] = None):
         self.tracks: list[str] = [] if track_list is None else track_list
         self.name = name
 
-    def add_track(self, track: wavelink.Track) -> None:
-        self.tracks.append(track.id)
+    def add_track(self, track: wavelink.GenericTrack) -> None:
+        self.tracks.append(track.encoded)
 
-    def remove_track(self, track: wavelink.Track) -> None:
-        self.tracks.remove(track.id)
+    def remove_track(self, track: wavelink.GenericTrack) -> None:
+        self.tracks.remove(track.encoded)
 
     def remove_track_at(self, position: int) -> None:
         self.tracks.pop(position)
 
-    def update_list(self, new_tracks: list[wavelink.Track]):
+    def update_list(self, new_tracks: list[wavelink.GenericTrack]):
         track_list = []
         for track in new_tracks:
-            track_list.append(track.id)
+            track_list.append(track.encoded)
         self.tracks = list(dict.fromkeys(self.tracks + track_list).keys())
         # self.tracks = list(set(self.tracks + new_tracks))
 
@@ -66,12 +57,12 @@ class SkipMode(Enum):
     PREV = 1
 
 
-class Player(wavelink.Player):
+class OldPlayer(wavelink.Player):
     def __init__(self, dj_user: discord.Member, dj_channel: discord.TextChannel):
         super().__init__()
         self.history = wavelink.Queue()
         self.queue = wavelink.Queue()
-        self.current_track: wavelink.Track = None
+        self.current_track: wavelink.GenericTrack = None
         self.loop_mode: LoopMode = LoopMode.NO_LOOP
         self.dj_user: discord.Member = dj_user
         self.dj_channel: discord.TextChannel = dj_channel
@@ -82,17 +73,18 @@ class Player(wavelink.Player):
         self.is_stopped = False
         self.now_playing_message: discord.Message = None
 
+
         self.interrupt_position = 0
         self.interrupted_by_sound = False
 
 
-    async def add_to_queue(self, single: bool, track: wavelink.Track) -> None:
+    async def add_to_queue(self, single: bool, track: wavelink.GenericTrack) -> None:
         if single:
             self.queue.put(track)
         else:
             self.queue.extend(track)
 
-    def get_next_song(self) -> wavelink.Track:
+    def get_next_song(self) -> wavelink.GenericTrack:
         return self.queue.get()
 
     async def play_next_track(self):
@@ -106,7 +98,7 @@ class Player(wavelink.Player):
     async def start_current_track(self):
         if self.current_track is None:
             return
-        await self.play(source=self.current_track, replace=True)
+        await self.play(track=self.current_track, replace=True)
         # await asyncio.sleep(3)
         # pass
 
@@ -115,11 +107,11 @@ class Player(wavelink.Player):
             self.interrupt_position = self.position
             self.interrupted_by_sound = True
 
-        await self.play(source=track, replace=True)
+        await self.play(track=track, replace=True)
 
     async def resume_interrupted_track(self):
         if self.current_track:
-            await self.play(source=self.current_track, replace=True)
+            await self.play(track=self.current_track, replace=True)
             await self.seek(int(self.interrupt_position*1000))
             self.interrupt_position = 0
             self.interrupted_by_sound = False
@@ -173,7 +165,7 @@ class Player(wavelink.Player):
 #     await player.now_playing_message.delete()
 #     player.now_playing_message = await channel.send(content=message)
 
-def track_to_string(track: wavelink.Track):
+def track_to_string(track: wavelink.GenericTrack):
     title = ""
     title_length = len(track.title)
     if title_length > 36:
@@ -183,11 +175,13 @@ def track_to_string(track: wavelink.Track):
             title = (track.title[:36] + " ...").ljust(40)
     else:
         title = track.title.ljust(40)
-    message = f"{title}  -  {int(track.length // 60)}:{int(track.length % 60):02}\n"
+
+    d_hours, d_minutes, d_seconds = secondsDivMod(int(track.length // 1000))
+    message = f"{title}  -  {f'{d_hours}:02' + ':' if d_hours > 0 else ''}{d_minutes:02}:{d_seconds:02}\n"
     return message
 
 
-async def create_queue_pages(player: Player):
+async def create_queue_pages(player: OldPlayer):
     now_playing = player.current_track
     history_list = list(player.history)
     history_length = len(history_list)
@@ -207,13 +201,17 @@ async def create_queue_pages(player: Player):
     pages = []
     current_page = 0
 
+
+
+
     now_playing_text = ""
     if now_playing:
+        d_hours, d_minutes, d_seconds = secondsDivMod(int(now_playing.length // 1000))
+        p_hours, p_minutes, p_seconds = secondsDivMod(int(player.position // 1000))
 
         now_playing_text = f"NOW PLAYING ➤ {now_playing.title}" \
-                           f"  -  {int(player.position / 60)}" \
-                           f":{int(player.position % 60):02}" \
-                           f" / {int(now_playing.length / 60)}:{int(now_playing.length % 60):02}\n"
+                           f"  -  {f'{p_hours}:02' + ':' if p_hours > 0 else ''}{p_minutes:02}:{p_seconds:02}" \
+                           f" / {f'{d_hours}:02' + ':' if d_hours > 0 else ''}{d_minutes:02}:{d_seconds:02}\n"
     else:
         if not history_peek and not queue_peek:
             now_playing_text = "The queue is empty\n"
@@ -305,7 +303,7 @@ DISCORD_ATTACHMENT_REG = re.compile(r"(https://|http://)?(cdn\.|media\.)discord(
 SOUNDCLOUD_REG = re.compile("^https?:\/\/(www\.|m\.)?soundcloud\.com\/[a-z0-9](?!.*?(-|_){2})[\w-]{1,23}[a-z0-9](?:\/.+)?$")
 
 
-async def search_song(search: str, single_track=False) -> list[wavelink.Track]:
+async def search_song(search: str, single_track=False) -> list[wavelink.GenericTrack]:
     is_yt_url = bool(YT_URL_REG.search(search))
     is_url = bool(URL_REG.search(search))
     decoded_spotify_url = spotify.decode_url(search)
@@ -320,7 +318,7 @@ async def search_song(search: str, single_track=False) -> list[wavelink.Track]:
     if is_yt_url:
         if "list=" in search:
 
-            playlist = await node.get_playlist(identifier=search, cls=wavelink.YouTubePlaylist)
+            playlist = await node.get_playlist(query=search, cls=wavelink.YouTubePlaylist)
             if "playlist" in search:
                 tracks = playlist.tracks
             else:
@@ -328,22 +326,16 @@ async def search_song(search: str, single_track=False) -> list[wavelink.Track]:
         else:
             tracks = await node.get_tracks(query=search, cls=wavelink.YouTubeTrack)
     elif is_spotify_url:
-        if decoded_spotify_url["type"] is spotify.SpotifySearchType.track:
-            tracks = [await spotify.SpotifyTrack.search(query=decoded_spotify_url["id"],
-                                                        type=decoded_spotify_url["type"],
-                                                        return_first=True)]
-        elif decoded_spotify_url["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
-            tracks = await spotify.SpotifyTrack.search(query=decoded_spotify_url["id"],
-                                                       type=decoded_spotify_url["type"])
+        tracks = await spotify.SpotifyTrack.search(query=decoded_spotify_url.id)
+
     elif is_soundcloud_url:
         tracks = await node.get_tracks(query=search, cls=wavelink.SoundCloudTrack)
 
     elif is_discord_attachment:
-        modified_track = (await node.get_tracks(query=search, cls=wavelink.LocalTrack))[0]
+        modified_track = (await node.get_tracks(query=search, cls=wavelink.GenericTrack))[0]
         modified_track.title = attachment_regex_result.group("filename")+"."+attachment_regex_result.group("mime")
         tracks = [modified_track]
     else:
-        tracks = [await wavelink.YouTubeTrack.search(query=search, return_first=True)]
-
+        tracks = [(await wavelink.YouTubeTrack.search(search))[0]]
     return tracks[0] if single_track else tracks
 

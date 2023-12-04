@@ -1,25 +1,7 @@
-import asyncio
-import datetime
-import re
-from typing import (
-    Literal,
-    Dict,
-    Union,
-    Optional,
-    List,
-)
-import discord
 import discord.utils
-import wavelink
 from discord.ext import commands
-from discord import app_commands, VoiceChannel, StageChannel
-from discord.ext import tasks
-from wavelink import YouTubeTrack
-from collections import deque
-import atexit
+from discord import app_commands
 from bot.utils.ui import MessageScroller
-from bot.utils.ui import QueueController
-from bot.utils.utils import seconds_to_time
 from bot.utils.bot_data import Server
 from bot.utils.music_helpers import *
 from bot.utils.utils import find_closely_matching_dict_keys
@@ -34,9 +16,9 @@ class Soundboard(commands.GroupCog, group_name="soundboard"):
 
     async def join_voice_channel(self, interaction: discord.Interaction, guild: discord.Guild=None, voice_channel: discord.VoiceChannel=None, keep_existing_player=False):
         server: Server = self.bot.fetch_server(interaction.guild_id)
-        voice_client: Player = interaction.guild.voice_client
+        voice_client: OldPlayer = interaction.guild.voice_client
         if guild:
-            voice_client: Player = guild.voice_client
+            voice_client: OldPlayer = guild.voice_client
 
         channel_to_join: discord.VoiceChannel = interaction.user.voice.channel
         if voice_channel:
@@ -47,9 +29,9 @@ class Soundboard(commands.GroupCog, group_name="soundboard"):
             if keep_existing_player:
                 player = voice_client
             else:
-                player = Player(dj_user=interaction.user, dj_channel=interaction.channel)
+                player = OldPlayer(dj_user=interaction.user, dj_channel=interaction.channel)
         else:
-            player = Player(dj_user=interaction.user, dj_channel=interaction.channel)
+            player = OldPlayer(dj_user=interaction.user, dj_channel=interaction.channel)
 
         voice_client = await channel_to_join.connect(cls=player)
         server.has_player = True
@@ -78,10 +60,10 @@ class Soundboard(commands.GroupCog, group_name="soundboard"):
     @app_commands.command(name="play", description="plays the given sound")
     async def play(self, interaction: discord.Interaction, sound_name: str):
         await interaction.response.defer(thinking=True)
-        current_player: Player = interaction.guild.voice_client
+        current_player: OldPlayer = interaction.guild.voice_client
         server: Server = self.bot.fetch_server(interaction.guild_id)
         if sound_name not in server.soundboard.keys():
-            close_match_dict = find_closely_matching_dict_keys(search=sound_name, tags=server.soundboard, n=1, cutoff=0.2)
+            close_match_dict = find_closely_matching_dict_keys(search=sound_name, data=server.soundboard, n=1, cutoff=0.2)
             close_match = list(close_match_dict.keys())[0] if len(close_match_dict) else None
             if not close_match:
                 await interaction.edit_original_response(content=f"The sound `{sound_name}` does not exist")
@@ -92,10 +74,10 @@ class Soundboard(commands.GroupCog, group_name="soundboard"):
 
 
 
-        current_player: Player = await self.attempt_to_join_vc(interaction=interaction, should_switch_channel=False)
+        current_player: OldPlayer = await self.attempt_to_join_vc(interaction=interaction, should_switch_channel=False)
         await interaction.edit_original_response(content=f"{interaction.user.name} played {sound_name}")
 
-        track = await wavelink.NodePool.get_node().build_track(identifier=server.soundboard[sound_name], cls=wavelink.Track)
+        track = await wavelink.NodePool.get_node().build_track(encoded=server.soundboard[sound_name], cls=wavelink.GenericTrack)
         track.title = sound_name
         await current_player.interrupt_current_track(track)
 
@@ -103,7 +85,7 @@ class Soundboard(commands.GroupCog, group_name="soundboard"):
     @app_commands.command(name="stop", description="stops the current sound")
     async def stop(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
-        current_player: Player = interaction.guild.voice_client
+        current_player: OldPlayer = interaction.guild.voice_client
         if not current_player:
             await interaction.edit_original_response(content="I'm not in a channel")
             return
@@ -117,14 +99,14 @@ class Soundboard(commands.GroupCog, group_name="soundboard"):
     @app_commands.command(name="add", description="adds a sound to the soundboard")
     async def add_sound(self, interaction: discord.Interaction, sound_name: str, sound_search: str):
         await interaction.response.defer(thinking=True)
-        track: wavelink.Track = await search_song(sound_search, single_track=True)
+        track: wavelink.GenericTrack = await search_song(sound_search, single_track=True)
         server: Server = self.bot.fetch_server(interaction.guild_id)
 
         if sound_name in server.soundboard.keys():
             await interaction.edit_original_response(content="A sound with that name already exists")
             return
 
-        server.soundboard[sound_name] = track.id
+        server.soundboard[sound_name] = track.encoded
         await interaction.edit_original_response(content=f"Added {sound_name} to the soundboard")
 
     @app_commands.autocomplete(sound_name=soundboard_autocomplete)

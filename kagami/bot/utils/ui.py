@@ -1,14 +1,9 @@
-import json
-import os
-import discord
 import discord.utils
-from bot.utils.utils import ClampedValue
 from bot.utils.utils import clamp
-from discord.ext import commands
-from discord import app_commands
 from typing import Optional
 
 from bot.utils.music_helpers import *
+from bot.utils.interactions import respond
 from discord.ext import tasks
 
 
@@ -20,10 +15,19 @@ class CustomUIView(discord.ui.View):
         self.message = kwargs.get("message", None)
         # self.deletes_message = kwargs.get("deletes_message")
 
-    async def on_timeout(self) -> None:
+
+    async def stopHandler(self):
         if self.message:
             await self.message.edit(view=None)
-        self.stop()
+
+    async def stop(self):
+        await self.stopHandler()
+        super().stop()
+
+
+
+    async def on_timeout(self) -> None:
+        await self.stop()
 
     async def delete_message(self):
         await self.message.delete()
@@ -40,7 +44,8 @@ class MessageReply(discord.ui.Modal, title="Message Reply"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await self.message.reply(f"{self.response}")
-        await interaction.response.defer(ephemeral=True)
+        await respond(interaction, f"Replied to {self.message.author}", ephemeral=True, delete_after=3)
+        await interaction.response.send_message(ephemeral=True, )
 
 
 class PlayerControls(CustomUIView):
@@ -50,7 +55,7 @@ class PlayerControls(CustomUIView):
             "message": message,
         })
         super().__init__(**kwargs)
-        self.player: Player = player
+        self.player: OldPlayer = player
         self.message = message
 
     async def update_player_buttons(self):
@@ -87,7 +92,7 @@ class PlayerControls(CustomUIView):
         await self.player.stop()
 
     @discord.ui.button(emoji="⏹", style=discord.ButtonStyle.green, custom_id="PlayerControls:stop")
-    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def stop_playback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message()
 
         self.player.is_stopped = True
@@ -144,14 +149,21 @@ class PlayerControls(CustomUIView):
 class DeleteMessageButton(discord.ui.Button):
     def __init__(self, deletes_message=False):
         super().__init__(style=discord.ButtonStyle.red, emoji="🗑", row=4)
+        self._view: Optional[CustomUIView] = None
         self.deletes_message = deletes_message
+
+
+    @property
+    def view(self)->Optional[CustomUIView]:
+        return self._view
 
     async def callback(self, interaction: discord.Interaction):
         assert self.view is not None
         assert isinstance(self.view, CustomUIView)
+        await self.view.stop()
         if self.deletes_message:
             await self.view.delete_message()
-        self.view.stop()
+
 
 
 # class ViewDeleteButton(CustomUIView):
@@ -230,7 +242,7 @@ class MessageScroller(CustomUIView):
 
 
 class QueueController(PlayerControls, MessageScroller):
-    def __init__(self, player: Player, message, pages, home_page):
+    def __init__(self, player: OldPlayer, message, pages, home_page):
         super().__init__(player=player, message=message, pages=pages, home_page=home_page, timeout=600)
         # self.add_item(DeleteMessageButton(deletes_message=True))
         self.update_pages_loop.start()
@@ -248,13 +260,16 @@ class QueueController(PlayerControls, MessageScroller):
         self.update_page_data(pages, home_page)
         await self.update_message()
 
-    async def on_timeout(self) -> None:
+
+    async def stopHandler(self):
         try:
-            await self.message.delete()
+            self.update_pages_loop.stop()
         except discord.HTTPException as e:
             print(f"Exception Encountered: {e}")
 
-        del self
+
+    async def on_timeout(self) -> None:
+        await self.stop()
 
 
 
