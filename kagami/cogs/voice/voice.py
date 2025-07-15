@@ -210,7 +210,9 @@ class TracklistCallback(SimpleCallback[Playable]):
 
     @override
     async def get_items(self, db: aiosqlite.Connection, interaction: Interaction, state: ScrollerState, *args: Any, tracks: list[Playable], **kwargs: Any) -> list[Playable]:
-        return tracks
+        # should display only a small window rather than all tracks at once
+        item_offset = self.item_offset
+        return tracks[item_offset:item_offset+self.PAGE_ITEM_COUNT]
 
     @override
     async def item_formatter(self, db: aiosqlite.Connection, interaction: Interaction, state: ScrollerState, index: int, track: Playable, *args: Any, **kwargs: Any) -> str:
