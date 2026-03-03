@@ -76,6 +76,33 @@ class PlayerSession(Player):
             await db.commit()
             logger.debug(f"save_queue - committed changes")
 
+
+    @override
+    async def _dispatch_voice_update(self) -> None:
+        assert self.guild is not None
+        data = self._voice_state["voice"]
+        logger.debug(f"voice_update data: {data}")
+        logger.debug(f"voice_update channel_id: {self.channel.id}")
+
+        session_id: str | None = data.get("session_id", None)
+        token: str | None = data.get("token", None)
+        endpoint: str | None = data.get("endpoint", None)
+        channel_id: str | int = str(self.channel.id)
+
+        if not session_id or not token or not endpoint:
+            return
+
+        request = {"voice": {"sessionId": session_id, "token": token, "endpoint": endpoint, "channelId": channel_id}}
+
+        try:
+            await self.node._update_player(self.guild.id, data=request) # pyright: ignore[reportArgumentType]
+        except wavelink.LavalinkException:
+            await self.disconnect()
+        else:
+            self._connection_event.set()
+
+        # logger.debug("Player %s is dispatching VOICE_UPDATE.", self.guild.id)
+
     @override
     async def disconnect(self, **kwargs: dict[str, Any]) -> None:
         if self.status_bar:
