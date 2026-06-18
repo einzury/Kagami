@@ -1,11 +1,12 @@
 # Kagami
 A discord bot made for use on small personal servers \
-Probably has a lot of bugs that make it undesirable for large servers but has some fun features
+Probably has a lot of bugs that make it undesirable for large servers but it does have some fun features
 ## Hosting
-Current Version: 0.8.1
+Current Version: 0.8.6
 ### Local Hosting
-- Lavalink Version [4.1.1](https://github.com/lavalink-devs/Lavalink/releases/tag/4.1.1)
+- Lavalink Version [4.2.1](https://github.com/lavalink-devs/Lavalink/releases/tag/4.2.1)
   - The included [application config](./lavalink/application.yml) should suffice
+  - Some lavalink plugins are also in use, the current version can be found in the above
 ### Building Docker Images
 `docker build -f Dockerfile -t kagami_bot:amd64 .`
 
@@ -27,9 +28,8 @@ Now you can start the bot \
 
 This procedure assumes that you have just cloned the entire respository locally. \
 By default the bot will attempt to run with music functionality which requires lavalink to be running in a seperate processes. 
-If you do not want this then just remove the [music module](./kagami/cogs/depr_music.py) from the cogs directory. 
-If you do not desire any other bit of functionality you can remove the corresponding module from the same directory. \
-**Note:** Cog files are the only files that can be removed without breaking the bot. They contain various isolated feature sets that do no depend on eachother.
+If you do not want this then you can add "voice" to the "EXCLUDED_COGS" environment variable or remove the [voice module](./kagami/cogs/voice/) from the cogs directory.
+Every module located under [cogs](./kagami/cogs/) can be disabled or removed without breaking anything else.
 
 ### Starting lavalink
 Run the following command from the project source \
