@@ -26,7 +26,7 @@ vs_chat_script_path = config.get("VS_CHAT_SCRIPT_PATH", str)
 vs_chat_screenname = config.get("VS_CHAT_SCREENNAME", str)
 
 # Can't allocate pseudo-tty anyways so no need for -t
-cmds = ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-i", config.ssh_path + vs_chat_key, f"{vs_chat_user}@{vs_chat_address}"]
+cmds = ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "StrictHostKeyChecking=accept-new", "-i", config.ssh_path + vs_chat_key, f"{vs_chat_user}@{vs_chat_address}"]
 
 class VSChat(commands.Cog):
     def __init__(self, bot):
