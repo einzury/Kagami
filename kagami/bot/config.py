@@ -71,3 +71,4 @@ drop_triggers = get("DROP_TRIGGERS", bool, False)
 drop_indexes = get("DROP_INDEXES", bool, False)
 excluded_cogs = get("EXCLUDED_COGS", list, list()) # ['<cog_name>', '<cog_name>']
 
+ssh_path = get("SSH_PATH", str, "ssh/")
