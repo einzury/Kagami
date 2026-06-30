@@ -25,7 +25,8 @@ vs_chat_log_path = config.get("VS_CHAT_LOG_PATH", str)
 vs_chat_script_path = config.get("VS_CHAT_SCRIPT_PATH", str)
 vs_chat_screenname = config.get("VS_CHAT_SCREENNAME", str)
 
-cmds = ["/usr/bin/ssh", "-t", "-o", "BatchMode=yes", "-i", config.ssh_path + vs_chat_key, f"{vs_chat_user}@{vs_chat_address}"]
+# Can't allocate pseudo-tty anyways so no need for -t
+cmds = ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-i", config.ssh_path + vs_chat_key, f"{vs_chat_user}@{vs_chat_address}"]
 
 class VSChat(commands.Cog):
     def __init__(self, bot):
@@ -48,12 +49,21 @@ class VSChat(commands.Cog):
     async def screen(self, ctx, *args):
         assert self.chat_relay is not None
         command = " ".join(args)
+
         ssh_cmd: str = " ".join(cmds)
-        screen_cmd = f" sudo -u vintagestory screen -r {vs_chat_screenname} -X eval 'stuff \"{command}\"\\015'\n"
-        # proc = await asyncio.create_subprocess_shell(ssh_cmd + screen_cmd, stdin=PIPE, stdout=PIPE)
         proc = await asyncio.create_subprocess_shell(ssh_cmd, stdin=PIPE, stdout=PIPE)
-        out, err = await proc.communicate(screen_cmd.encode("utf-8"))
-        await ctx.send(f"Sent: `{command}`")
+        if command.startswith("/"):
+            command = command[1:]
+            cmd = f" sudo -u vintagestory {vs_chat_script_path} command {command}\n"
+            out, err = await proc.communicate(cmd.encode("utf-8"))
+            out = "".join(out.decode("utf-8").splitlines(keepends=True)[8:])
+            await ctx.send(f"Sent: `{command}`\nGot:\n```\n{out}```")
+        else:
+            cmd = f" sudo -u vintagestory screen -r {vs_chat_screenname} -X eval 'stuff \"{command}\"\\015'\n"
+            # proc = await asyncio.create_subprocess_shell(ssh_cmd + cmd, stdin=PIPE, stdout=PIPE)
+            # proc = await asyncio.create_subprocess_shell(ssh_cmd, stdin=PIPE, stdout=PIPE)
+            out, err = await proc.communicate(cmd.encode("utf-8"))
+            await ctx.send(f"Sent: `{command}`")
         # await ctx.send(f"Sent: `{command}`\nGot:\n```\n{out.decode("utf-8")}```")
         # out, err = await proc.communicate(f"sudo -u vintagestory screen -r {vs_chat_screenname} -X eval 'stuff \"{command}\"\\015'\n".encode("utf-8"))
 
