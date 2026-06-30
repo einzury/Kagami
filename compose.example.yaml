@@ -5,6 +5,7 @@ services:
     network_mode: host
     volumes:
       - ${DATA_PATH}:/kagami/data
+      - ${SSH_PATH}:/kagami/ssh
     expose:
       - 8077
     ports:
