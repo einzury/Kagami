@@ -115,7 +115,11 @@ class ChatRelay:
         assert self.proc_screen is not None
         assert self.proc_screen.stdin is not None
         # self.proc_screen.stdin.write(f"{command}\n".encode("utf-8"))
-        self.proc_screen.stdin.write(f"sudo -u vintagestory screen -r {vs_chat_screenname} -X eval 'stuff \"{command}\"\\015'\n".encode("utf-8"))
+        self.proc_screen.stdin.write(
+            f"sudo -u vintagestory \
+            screen -r {vs_chat_screenname} -X \
+            eval 'stuff \"{command}\"\\015'\n".encode("utf-8")
+        )
         await self.proc_screen.stdin.drain()
 
     async def start(self, bot: Kagami, channel: Messageable):
