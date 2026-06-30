@@ -5,6 +5,7 @@ WORKDIR /kagami
 COPY . .
 #COPY requirements.txt .
 # RUN pip install --upgrade pip
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN pip install -r requirements.txt
 #  --force-reinstall
 
