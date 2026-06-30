@@ -6,6 +6,7 @@ services:
     volumes:
       - ${DATA_PATH}:/kagami/data
       - ${SSH_PATH}:/kagami/ssh
+      - /usr/bin/ssh:/usr/bin/ssh
     expose:
       - 8077
     ports:

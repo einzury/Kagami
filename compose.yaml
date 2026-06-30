@@ -9,6 +9,7 @@ services:
 #      - ${DATA_PATH}:/kagami/data
       - ./kagami/data:/kagami/data
       - ./kagami/ssh:/kagami/ssh
+      - /usr/bin/ssh:/usr/bin/ssh
     expose:
       - 8077
     ports:
