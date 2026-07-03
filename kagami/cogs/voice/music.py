@@ -767,7 +767,9 @@ class MusicCog(GroupCog, group_name="m"):
         # # logger.debug(f"wavelink_websocket_closed - cast session")
         # logger.debug(f"wavelink_websocket_closed - {session}")
         # await self.session_new_tracklist(session)
-        await session.save_queue()
+
+        # queue saving not implemented yet
+        # await session.save_queue()
 
 
     @GroupCog.listener()
