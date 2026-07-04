@@ -195,25 +195,25 @@ class ChatRelay:
         self.relay_channel = None
         self.is_relaying = False
 
-    async def reset_screen(self):
-        if self.proc_screen is None:
-            await self.create_proc_screen()
-        assert self.proc_screen is not None
-        assert self.proc_screen.stdin is not None
-        logger.debug(f"reset_screen")
-        payload = (
-            f"sudo -u vintagestory screen -r {config_screenname} -X "
-            f"stuff $'\001:reset\015'\n"
-        )
-        self.proc_screen.stdin.write(payload.encode("utf-8"))
-        await self.proc_screen.stdin.drain()
+    # async def reset_screen(self):
+    #     if self.proc_screen is None:
+    #         await self.create_proc_screen()
+    #     assert self.proc_screen is not None
+    #     assert self.proc_screen.stdin is not None
+    #     logger.debug(f"reset_screen")
+    #     payload = (
+    #         f"sudo -u vintagestory screen -r {config_screenname} -X "
+    #         f"stuff $'\001:reset\015'\n"
+    #     )
+    #     self.proc_screen.stdin.write(payload.encode("utf-8"))
+    #     await self.proc_screen.stdin.drain()
 
     async def send_to_game(self, command: str):
         if self.proc_screen is None:
             await self.create_proc_screen()
         assert self.proc_screen is not None
         assert self.proc_screen.stdin is not None
-        await self.reset_screen()
+        # await self.reset_screen()
         logger.debug(f"send_to_game: {command}")
         # self.proc_screen.stdin.write(f"{command}\n".encode("utf-8"))
         payload = (
@@ -257,6 +257,7 @@ class ChatRelay:
         content = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", content)
         content = re.sub(r"\*(.+?)\*", r"<i>\1</i>", content)
         content = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', content)
+        content = re.sub(r'(?<!\[)(?<!\()(https?://[^\s<>"\']+)', r'<a href="\1">\1</a>', content)
 
         logger.debug(f"relay_discord: [{message.author.name}] ~ {content}")
         # await self.send_to_game(f"Discord: [{message.author.name}] ~ {content}")
