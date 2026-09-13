@@ -5,7 +5,7 @@ import asyncio, time, subprocess
 from collections.abc import Coroutine
 from types import CoroutineType
 from typing import Any, Iterable, override
-from discord import Message, TextChannel
+from discord import Message, StageChannel, TextChannel, Thread, VoiceChannel
 import discord.utils
 from discord.ext import commands
 from discord import app_commands
@@ -15,6 +15,12 @@ from subprocess import PIPE, Popen, STDOUT
 from asyncio.subprocess import Process
 from asyncio import StreamReader
 import re
+
+from dataclasses import dataclass
+from common.tables import Guild, PersistentSettings
+from common.database import *
+from common.types import MessageableChannel
+# from aiosqlite import Connection
 
 from common.logging import setup_logging
 
@@ -35,15 +41,100 @@ config_screenname = config.get("VSCHAT_SCREENNAME", str)
 # Can't allocate pseudo-tty anyways so no need for -t
 cmds = ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-i", config.ssh_path + config_key, f"{config_user}@{config_address}"]
 
+
+# This is a functional database for vschat settings but it doesn't need to exist at the moment.
+# @dataclass
+# class VSChatSettings(Table, schema_version=1, trigger_version=1):
+#     guild_id: int
+#     channel_id: int
+#     enabled: bool = False
+#
+#     @classmethod
+#     async def create_table(cls, db: Connection):
+#         query = f"""
+#         CREATE TABLE IF NOT EXISTS {VSChatSettings}(
+#             guild_id INTEGER NOT NULL,
+#             PRIMARY KEY (guild_id),
+#             channel_id INTEGER NOT NULL,
+#             enabled INTEGER DEFAULT 0
+#             FOREIGN KEY (guild_id) REFERENCES {Guild}(id)
+#             ON UPDATE CASCADE ON DELETE CASCADE
+#         )
+#         """
+#         await db.execute(query)
+#
+#     async def upsert(self, db: Connection) -> VSChatSettings:
+#         query = f"""
+#         INSERT INTO {VSChatSettings} (guild_id, channel_id, enabled)
+#         VALUES (:guild_id, :channel_id, :enabled)
+#         ON CONFLICT (guild_id)
+#         DO UPDATE SET 
+#             enabled = :enabled,
+#             channel_id = :channel_id
+#         RETURNING *
+#         """
+#         db.row_factory = VSChatSettings.row_factory
+#         async with db.execute(query, self.asdict()) as cur:
+#             result = await cur.fetchone()
+#         return result
+#
+#     @override
+#     async def select(self, db: Connection) -> VSChatSettings | None:
+#         query = f"""
+#         SELECT * FROM {VSChatSettings}
+#         WHERE guild_id = ?
+#         """
+#         db.row_factory = VSChatSettings.row_factory
+#         async with db.execute(query, self.asdict()) as cur:
+#             result = await cur.fetchone()
+#         return result
+#
+#     @classmethod
+#     async def selectWhere(cls, db: Connection, guild_id: int) -> VSChatSettings | None:
+#         query = f"""
+#         SELECT * FROM {VSChatSettings}
+#         WHERE guild_id = ?
+#         """
+#         db.row_factory = VSChatSettings.row_factory
+#         async with db.execute(query, (guild_id,)) as cur:
+#             result = await cur.fetchone()
+#         return result
+#
+
 class VSChat(commands.Cog):
     def __init__(self, bot):
         self.bot: Kagami = bot
-        self.channel: Messageable | None = None
+        self.channel: MessageableChannel | None = None
         self.chat_relay: ChatRelay | None = None
 
     async def cog_load(self):
         if self.chat_relay is not None: await self.chat_relay.kill_processes()
         self.chat_relay = ChatRelay()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self.query_restart()
+
+
+    async def save_settings(self, channel_id: int, enabled: bool):
+        async with self.bot.dbman.conn() as db:
+            # logger.debug("save_settings")
+            await PersistentSettings("vschat_enabled", enabled).upsert(db)
+            await PersistentSettings("vschat_channel_id", channel_id).upsert(db)
+            await db.commit()
+
+    async def query_settings(self) -> tuple[int, bool]:
+        async with self.bot.dbman.conn() as db:
+            # logger.debug("query_settings")
+            chat_enabled = await PersistentSettings.selectValue(db, "vschat_enabled", False)
+            channel_id = await PersistentSettings.selectValue(db, "vschat_channel_id", None)
+        return channel_id, chat_enabled
+
+    async def query_restart(self):
+        channel_id, enabled = await self.query_settings()
+        if enabled and (channel:=self.bot.get_channel(channel_id)):
+            assert isinstance(channel, Messageable)
+            await self.restart_relay(channel)
 
     @override
     async def cog_unload(self) -> None:
@@ -83,23 +174,30 @@ class VSChat(commands.Cog):
         # await ctx.send(f"Sent: `{command}`\nGot:\n```\n{out.decode("utf-8")}```")
         # out, err = await proc.communicate(f"sudo -u vintagestory screen -r {vs_chat_screenname} -X eval 'stuff \"{command}\"\\015'\n".encode("utf-8"))
 
-    @vschat.group(name="relay", invoke_without_command=True)
-    @commands.is_owner()
-    async def relay(self, ctx: Context):
+    async def restart_relay(self, channel: MessageableChannel):
         new_relay = True
         if self.chat_relay is not None:
             if self.chat_relay.is_relaying: 
                 await self.chat_relay.stop()
-                await ctx.send("`Stopped the existing Relay`")
+                await channel.send("`Stopped the existing Relay`")
                 new_relay = False
         else:
             self.chat_relay = ChatRelay()
         assert self.chat_relay is not None
-        await self.chat_relay.start(self.bot, ctx.channel)
+        await self.chat_relay.start(self.bot, channel)
+        await self.save_settings(channel.id, True)
         if new_relay:
-            await ctx.send("`Started the Relay`")
+            await channel.send("`Started the Relay`")
         else:
-            await ctx.send("`Restarted the Relay`")
+            await channel.send("`Restarted the Relay`")
+
+
+
+    @vschat.group(name="relay", invoke_without_command=True)
+    @commands.is_owner()
+    async def relay(self, ctx: Context):
+        # assert all(isinstance(ctx.channel, c) for c in MessageableChannel)
+        await self.restart_relay(ctx.channel)
 
     @relay.command(name="start")
     @commands.is_owner()
@@ -111,6 +209,7 @@ class VSChat(commands.Cog):
             await ctx.send("`The Relay is already Running`")
             return
         await self.chat_relay.start(self.bot, ctx.channel)
+        await self.save_settings(ctx.channel.id, True)
         await ctx.send("`Started the Relay`")
 
     @relay.command(name="stop")
@@ -121,6 +220,7 @@ class VSChat(commands.Cog):
             return
         assert self.chat_relay is not None
         await self.chat_relay.stop()
+        await self.save_settings(ctx.channel.id, False)
         await ctx.send("`Stopped the Relay`")
 
     @commands.Cog.listener()
@@ -140,7 +240,7 @@ class ChatRelay:
         self.proc_log_audit: Process | None=None
         self.proc_screen: Process | None=None
         self.ssh_cmd: str = " ".join(cmds)
-        self.relay_channel: Messageable | None=None
+        self.relay_channel: MessageableChannel | None=None
         self.is_relaying: bool = False
 
     async def create_proc_log_chat(self):
@@ -182,7 +282,7 @@ class ChatRelay:
         self.proc_log_audit = None
         self.proc_screen = None
 
-    async def start(self, bot: Kagami, channel: Messageable):
+    async def start(self, bot: Kagami, channel: MessageableChannel):
         await self.create_processes()
         self.relay_channel = channel
         self.is_relaying = True
@@ -325,4 +425,5 @@ class ChatRelay:
 
 async def setup(bot: Kagami):
     await bot.add_cog(VSChat(bot))
+    await bot.dbman.setup(__name__)
 
