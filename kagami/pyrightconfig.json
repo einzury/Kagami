@@ -4,5 +4,6 @@
     "reportUnusedCallResult" : false,
     "reportIgnoreCommentWithoutRule" : false,
     "reportExplicitAny": false,
-    "reportPrivateUsage": false
+    "reportPrivateUsage": false,
+    "reportReturnType": "warning"
 }
