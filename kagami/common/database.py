@@ -18,6 +18,9 @@ from common.logging import setup_logging
 from collections.abc import Generator, Iterable
 from typing import Any, Annotated, Callable, ClassVar, Protocol, Generic, cast, overload, override
 
+from aiosqlite import Connection
+__all__ = ["Table", "Connection", "ConnectionContext"]
+
 logger = setup_logging(__name__)
 sqlite3.enable_callback_tracebacks(True)
 
