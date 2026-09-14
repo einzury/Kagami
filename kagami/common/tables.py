@@ -68,7 +68,7 @@ class Guild(Table, schema_version=2, trigger_version=2):
     name: str
 
     @classmethod
-    def fromDiscord(cls, guild=discord.Guild):
+    def fromDiscord(cls, guild: discord.Guild):
         return Guild(id=guild.id, name=guild.name)
 
     @classmethod
