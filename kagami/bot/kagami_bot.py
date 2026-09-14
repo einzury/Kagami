@@ -43,16 +43,11 @@ class Kagami(commands.Bot):
         self.activity = discord.CustomActivity("Testing new things")
         self.raw_data = {}
         self.database = None
-        self.dbman: DatabaseManager = None
-        self.changeCmdError()
-        self.init_data()
+        self.dbman: DatabaseManager = DatabaseManager(config.data_path + config.db_name, pool_size=config.connection_pool_size)
+        self.set_tree_on_error()
         # self.restart_on_close = False
 
-
-    def init_data(self):
-        self.dbman = DatabaseManager(config.data_path + config.db_name, pool_size=config.connection_pool_size)
-
-    def changeCmdError(self):
+    def set_tree_on_error(self):
         tree = self.tree
         self._old_tree_error = tree.on_error
         tree.on_error = self.on_app_command_error
@@ -83,20 +78,22 @@ class Kagami(commands.Bot):
             path = f"cogs.{name}"
             await self.load_extension(path)
 
+    async def __call__(self):
+        # Entry point for asyncio
+        self.prerun
+        await self.start(token=config.token)
+
+    def prerun(self):
+        logger = logging.getLogger("discord")
+        logger.setLevel(logging.INFO)
+        logger.propagate = True
+        logger.addHandler(discord_log_handler)
+
     @override
     async def start(self, token: str, *, reconnect: bool=True):
         await super().start(token, reconnect=reconnect)
 
-    def run_bot(self):
-        logger = logging.getLogger("discord")
-        logger.propagate = True
-        self.run(token=config.token, log_handler=discord_log_handler, log_level=logging.INFO) # Set to info so it isn't nonsense webhook spam
-
     async def close(self):
-        for cog in self.cogs:
-            cog_obj = self.get_cog(cog)
-            await cog_obj.cog_unload()
-        print("unloaded cogs\n")
         await super().close()
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
@@ -108,15 +105,15 @@ class Kagami(commands.Bot):
 
     async def on_guild_leave(self, guild: discord.Guild) -> None:
         async with self.dbman.conn() as db:
-            await Guild.deleteWhere(guild_id=guild.id)
+            await Guild.deleteWhere(db, guild_id=guild.id)
             await db.commit()
         my_logger.info(f"Removed guild: {guild} from the Guild Table")
 
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
-        if before.name != after.name:
-            async with self.dbman.conn() as db:
-                guild_data = Guild.fromDiscord(after)
-                await guild_data.upsert(db)
+        if before.name != after.name: return
+        async with self.dbman.conn() as db:
+            guild_data = Guild.fromDiscord(after)
+            await guild_data.upsert(db)
         my_logger.info(f"Updated data for guild: {guild_data} in the Guild Table")
 
     def getPartialMessage(self, message_id, channel_id) -> discord.PartialMessage | None:
