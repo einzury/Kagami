@@ -375,7 +375,7 @@ class ChatRelay:
         assert   self.proc_log_chat.stdout is not None
         reader = self.proc_log_chat.stdout
         # pattern = r"^\d{1,2}\.\d{1,2}\.\d{4} \d{2}:\d{2}:\d{2} \[Chat] (?!Admin).*:(.*)"
-        pattern = r"^\d{1,2}\.\d{1,2}\.\d{4} \d{2}:\d{2}:\d{2} \[Chat] \d \| (.*): (.*)"
+        pattern = r"^\d{1,2}\.\d{1,2}\.\d{4} \d{2}:\d{2}:\d{2} \[Chat] \d \| (.*?): (.*)"
         while self.is_relaying:
             line = await self.next_line(reader)
             if line is None: continue
