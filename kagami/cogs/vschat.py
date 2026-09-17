@@ -110,8 +110,11 @@ class VSChat(commands.Cog):
     async def cog_load(self):
         if self.chat_relay is not None: await self.chat_relay.terminate_processes()
         self.chat_relay = ChatRelay()
-        await self.bot.wait_until_ready()
-        if not self.bot.is_closed(): await self.query_restart()
+        self.bot.loop.create_task(self.query_restart())
+
+    # @commands.Cog.listener()
+    # async def on_ready(self):
+        # await self.query_restart()
 
     async def save_settings(self, channel_id: int, enabled: bool):
         async with self.bot.dbman.conn() as db:
@@ -128,6 +131,7 @@ class VSChat(commands.Cog):
         return channel_id, chat_enabled
 
     async def query_restart(self):
+        await self.bot.wait_until_ready()
         channel_id, enabled = await self.query_settings()
         if enabled and (channel:=self.bot.get_channel(channel_id)):
             assert isinstance(channel, Messageable)
