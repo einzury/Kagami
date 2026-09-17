@@ -110,7 +110,7 @@ class VSChat(commands.Cog):
     async def cog_load(self):
         if self.chat_relay is not None: await self.chat_relay.terminate_processes()
         self.chat_relay = ChatRelay()
-        await self.query_restart()
+        if not self.bot.is_closed(): await self.query_restart()
 
     # @commands.Cog.listener()
     # async def on_ready(self):
