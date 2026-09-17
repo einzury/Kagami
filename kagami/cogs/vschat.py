@@ -110,15 +110,8 @@ class VSChat(commands.Cog):
     async def cog_load(self):
         if self.chat_relay is not None: await self.chat_relay.terminate_processes()
         self.chat_relay = ChatRelay()
+        await self.bot.wait_until_ready()
         if not self.bot.is_closed(): await self.query_restart()
-
-    # @commands.Cog.listener()
-    # async def on_ready(self):
-    #     await self.query_restart()
-
-    @commands.Cog.listener()
-    async def on_resume(self):
-        await self.query_restart()
 
     async def save_settings(self, channel_id: int, enabled: bool):
         async with self.bot.dbman.conn() as db:
