@@ -108,13 +108,17 @@ class VSChat(commands.Cog):
         self.chat_relay: ChatRelay | None = None
 
     async def cog_load(self):
-        if self.chat_relay is not None: await self.chat_relay.kill_processes()
+        if self.chat_relay is not None: await self.chat_relay.terminate_processes()
         self.chat_relay = ChatRelay()
-
-    @commands.Cog.listener()
-    async def on_ready(self):
         await self.query_restart()
 
+    # @commands.Cog.listener()
+    # async def on_ready(self):
+    #     await self.query_restart()
+
+    @commands.Cog.listener()
+    async def on_resume(self):
+        await self.query_restart()
 
     async def save_settings(self, channel_id: int, enabled: bool):
         async with self.bot.dbman.conn() as db:
@@ -174,12 +178,13 @@ class VSChat(commands.Cog):
         # await ctx.send(f"Sent: `{command}`\nGot:\n```\n{out.decode("utf-8")}```")
         # out, err = await proc.communicate(f"sudo -u vintagestory screen -r {vs_chat_screenname} -X eval 'stuff \"{command}\"\\015'\n".encode("utf-8"))
 
-    async def restart_relay(self, channel: MessageableChannel):
+    async def restart_relay(self, channel: MessageableChannel, send_chats=False):
         new_relay = True
         if self.chat_relay is not None:
             if self.chat_relay.is_relaying: 
                 await self.chat_relay.stop()
-                await channel.send("`Stopped the existing Relay`")
+                logger.info("Stopped the existing Relay")
+                if send_chats: await channel.send("`Stopped the existing Relay`")
                 new_relay = False
         else:
             self.chat_relay = ChatRelay()
@@ -187,9 +192,11 @@ class VSChat(commands.Cog):
         await self.chat_relay.start(self.bot, channel)
         await self.save_settings(channel.id, True)
         if new_relay:
-            await channel.send("`Started the Relay`")
+            logger.info("Started the Relay")
+            if send_chats: await channel.send("`Started the Relay`")
         else:
-            await channel.send("`Restarted the Relay`")
+            logger.info("Restarted the Relay")
+            if send_chats: await channel.send("`Restarted the Relay`")
 
 
 
@@ -197,7 +204,7 @@ class VSChat(commands.Cog):
     @commands.is_owner()
     async def relay(self, ctx: Context):
         # assert all(isinstance(ctx.channel, c) for c in MessageableChannel)
-        await self.restart_relay(ctx.channel)
+        await self.restart_relay(ctx.channel, send_chats=True)
 
     @relay.command(name="start")
     @commands.is_owner()
@@ -267,20 +274,31 @@ class ChatRelay:
             await self.create_proc_log_audit()
             await self.create_proc_screen()
         except gaierror as e:
-            await self.kill_processes()
+            await self.terminate_processes()
             logger.error(e)
             asyncio.sleep(5)
             await self.create_processes()
 
-    async def kill_processes(self):
-        if self.proc_log_chat  is not None: self.proc_log_chat.kill()
-        if self.proc_log_main  is not None: self.proc_log_main.kill()
-        if self.proc_log_audit is not None: self.proc_log_audit.kill()
-        if self.proc_screen    is not None: self.proc_screen.kill()
-        self.proc_log_chat = None
-        self.proc_log_main = None
-        self.proc_log_audit = None
-        self.proc_screen = None
+    async def terminate_processes(self):
+        if self.proc_log_chat  is not None: 
+            self.proc_log_chat.terminate()
+            await self.proc_log_chat.wait()
+            self.proc_log_chat = None
+
+        if  self.proc_log_main  is not None: 
+            self.proc_log_main.terminate()
+            await self.proc_log_main.wait()
+            self.proc_log_main = None
+
+        if  self.proc_log_audit is not None: 
+            self.proc_log_audit.terminate()
+            await self.proc_log_audit.wait()
+            self.proc_log_audit = None
+
+        if  self.proc_screen is not None: 
+            self.proc_screen.terminate()
+            await self.proc_screen.wait()
+            self.proc_screen = None
 
     async def start(self, bot: Kagami, channel: MessageableChannel):
         await self.create_processes()
@@ -291,7 +309,7 @@ class ChatRelay:
         bot.loop.create_task(self.relay_main())
 
     async def stop(self):
-        await self.kill_processes()
+        await self.terminate_processes()
         self.relay_channel = None
         self.is_relaying = False
 
